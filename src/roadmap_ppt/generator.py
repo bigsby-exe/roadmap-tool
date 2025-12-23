@@ -133,6 +133,105 @@ def add_logo(slide, logo_path, position):
         print(f"Warning: Could not add logo: {e}")
 
 
+def load_template_slide(template_path, slide_index=0):
+    """
+    Load a slide from a template PowerPoint file (.pptx or .potx).
+    
+    Args:
+        template_path: Path to template file
+        slide_index: Index of slide to use from template (default: 0)
+    
+    Returns:
+        Presentation object with template slide, or None if loading fails
+    """
+    if template_path is None:
+        return None
+    
+    if not os.path.exists(template_path):
+        print(f"Warning: Template file not found: {template_path}")
+        return None
+    
+    try:
+        template_prs = Presentation(template_path)
+        if slide_index >= len(template_prs.slides):
+            print(f"Warning: Slide index {slide_index} out of range for template {template_path} (has {len(template_prs.slides)} slides)")
+            return None
+        return template_prs
+    except Exception as e:
+        print(f"Warning: Could not load template file {template_path}: {e}")
+        return None
+
+
+def create_slide_from_template(prs, template_prs, slide_index=0):
+    """
+    Create a new slide in the presentation using a template slide.
+    
+    Args:
+        prs: Target presentation to add slide to
+        template_prs: Template presentation object
+        slide_index: Index of slide from template to copy
+    
+    Returns:
+        New slide object, or None if template is invalid
+    """
+    if template_prs is None:
+        return None
+    
+    try:
+        if slide_index >= len(template_prs.slides):
+            return None
+        
+        template_slide = template_prs.slides[slide_index]
+        
+        # Copy the slide layout from template
+        slide_layout = template_slide.slide_layout
+        slide = prs.slides.add_slide(slide_layout)
+        
+        # Copy all shapes from template slide
+        for shape in template_slide.shapes:
+            # Get shape properties
+            left = shape.left
+            top = shape.top
+            width = shape.width
+            height = shape.height
+            
+            # Copy shape based on type
+            if hasattr(shape, 'image'):
+                # Picture shape
+                try:
+                    image = shape.image
+                    slide.shapes.add_picture(image.blob, left, top, width, height)
+                except (AttributeError, ValueError, IOError):
+                    pass
+            elif hasattr(shape, 'text'):
+                # Text shape - copy formatting but content will be replaced
+                try:
+                    new_shape = slide.shapes.add_textbox(left, top, width, height)
+                    new_shape.text_frame.text = shape.text_frame.text
+                    # Copy paragraph formatting
+                    for i, para in enumerate(shape.text_frame.paragraphs):
+                        if i < len(new_shape.text_frame.paragraphs):
+                            new_para = new_shape.text_frame.paragraphs[i]
+                            new_para.font.name = para.font.name
+                            new_para.font.size = para.font.size
+                            new_para.font.bold = para.font.bold
+                            new_para.font.color.rgb = para.font.color.rgb
+                except (AttributeError, ValueError, IndexError):
+                    pass
+        
+        # Copy background
+        try:
+            slide.background.fill.solid()
+            slide.background.fill.fore_color.rgb = template_slide.background.fill.fore_color.rgb
+        except (AttributeError, ValueError):
+            pass
+        
+        return slide
+    except Exception as e:
+        print(f"Warning: Could not copy template slide: {e}")
+        return None
+
+
 def calculate_text_height(text, width, font_size, min_height=None, max_height=None):
     """
     Calculate estimated height needed for text based on content length and width.
@@ -177,15 +276,29 @@ def calculate_text_height(text, width, font_size, min_height=None, max_height=No
 
 def create_title_slide(prs, objectives_data):
     """Create title slide with branding."""
-    slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
+    # Try to use template if configured
+    template_prs = load_template_slide(config.TITLE_SLIDE_TEMPLATE, config.TEMPLATE_SLIDE_INDEX)
+    if template_prs:
+        slide = create_slide_from_template(prs, template_prs, config.TEMPLATE_SLIDE_INDEX)
+        if slide is None:
+            # Fall back to blank layout if template copy failed
+            slide = prs.slides.add_slide(prs.slide_layouts[6])
+            # Set background color
+            background = slide.background
+            fill = background.fill
+            fill.solid()
+            fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
+    else:
+        # Use blank layout
+        slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
+        
+        # Set background color
+        background = slide.background
+        fill = background.fill
+        fill.solid()
+        fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
     
-    # Set background color
-    background = slide.background
-    fill = background.fill
-    fill.solid()
-    fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
-    
-    # Add logo if configured
+    # Add logo if configured (only if not using template or template doesn't have logo)
     if config.LOGO_PATH:
         add_logo(slide, config.LOGO_PATH, config.LOGO_POSITION)
     
@@ -267,16 +380,32 @@ def create_objectives_slide(prs, objectives_data):
     slides_needed = max(1, (total_elements + items_per_slide - 1) // items_per_slide) if total_elements > 0 else 1
     
     # Create slides
+    # Try to use template if configured
+    template_prs = load_template_slide(config.CONTENT_SLIDE_TEMPLATE, config.TEMPLATE_SLIDE_INDEX)
+    
     for slide_num in range(slides_needed):
-        slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
+        # Use template if available, otherwise use blank layout
+        if template_prs:
+            slide = create_slide_from_template(prs, template_prs, config.TEMPLATE_SLIDE_INDEX)
+            if slide is None:
+                # Fall back to blank layout if template copy failed
+                slide = prs.slides.add_slide(prs.slide_layouts[6])
+                # Set background
+                background = slide.background
+                fill = background.fill
+                fill.solid()
+                fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
+        else:
+            # Use blank layout
+            slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
+            
+            # Set background
+            background = slide.background
+            fill = background.fill
+            fill.solid()
+            fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
         
-        # Set background
-        background = slide.background
-        fill = background.fill
-        fill.solid()
-        fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
-        
-        # Add logo
+        # Add logo (only if not using template or template doesn't have logo)
         if config.LOGO_PATH:
             add_logo(slide, config.LOGO_PATH, config.LOGO_POSITION)
         
@@ -464,17 +593,33 @@ def create_roadmap_slides(prs, roadmap_df):
         max_items_any_phase = max([pd['total_items'] for pd in phase_data_list], default=0)
         slides_needed = max(1, (max_items_any_phase + items_per_slide - 1) // items_per_slide)
         
+        # Try to use template if configured
+        template_prs = load_template_slide(config.CONTENT_SLIDE_TEMPLATE, config.TEMPLATE_SLIDE_INDEX)
+        
         # Create slides for this timeline
         for slide_num in range(slides_needed):
-            slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
+            # Use template if available, otherwise use blank layout
+            if template_prs:
+                slide = create_slide_from_template(prs, template_prs, config.TEMPLATE_SLIDE_INDEX)
+                if slide is None:
+                    # Fall back to blank layout if template copy failed
+                    slide = prs.slides.add_slide(prs.slide_layouts[6])
+                    # Set background
+                    background = slide.background
+                    fill = background.fill
+                    fill.solid()
+                    fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
+            else:
+                # Use blank layout
+                slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
+                
+                # Set background
+                background = slide.background
+                fill = background.fill
+                fill.solid()
+                fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
             
-            # Set background
-            background = slide.background
-            fill = background.fill
-            fill.solid()
-            fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
-            
-            # Add logo
+            # Add logo (only if not using template or template doesn't have logo)
             if config.LOGO_PATH:
                 add_logo(slide, config.LOGO_PATH, config.LOGO_POSITION)
             

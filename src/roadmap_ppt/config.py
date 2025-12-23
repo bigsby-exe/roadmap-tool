@@ -49,6 +49,11 @@ NORTH_STAR_MAX_HEIGHT = Inches(3.0)  # Maximum height for north star box
 TEXT_BOX_MARGIN = Inches(0.2)  # Consistent margin for text boxes
 CHARS_PER_LINE_ESTIMATE = 80  # Estimated characters per line for text wrapping
 
+# TEMPLATE CONFIG
+TITLE_SLIDE_TEMPLATE = None  # Path to template file for title slide (.pptx or .potx) or None to skip
+CONTENT_SLIDE_TEMPLATE = None  # Path to template file for content slides (.pptx or .potx) or None to skip
+TEMPLATE_SLIDE_INDEX = 0  # Which slide from template to use (0 = first slide)
+
 ################################################################################
 ### END CONFIGURATION SECTION ###
 ################################################################################
