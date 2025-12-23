@@ -169,10 +169,11 @@ def create_title_slide(prs, objectives_data):
             config.SIDE_MARGIN,
             config.TITLE_TOP_MARGIN + Inches(2.5),
             config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN),
-            Inches(1.5)
+            config.SLIDE_HEIGHT - config.TITLE_TOP_MARGIN - Inches(2.5) - config.BOTTOM_MARGIN
         )
         subtitle_frame = subtitle_box.text_frame
         subtitle_frame.text = objectives_data['north_star']
+        subtitle_frame.word_wrap = True
         subtitle_para = subtitle_frame.paragraphs[0]
         subtitle_para.font.name = config.BODY_FONT_NAME
         subtitle_para.font.size = config.SUBTITLE_FONT_SIZE
@@ -313,125 +314,170 @@ def create_objectives_slide(prs, objectives_data):
 
 
 def create_roadmap_slides(prs, roadmap_df):
-    """Create roadmap slides grouped by timeline/phase."""
+    """Create roadmap slides grouped by timeline/phase with pagination support."""
     if roadmap_df.empty:
         return
+    
+    # Constants for pagination calculations
+    SLIDE_TITLE_HEIGHT = Inches(0.8)
+    SLIDE_TITLE_TOP = Inches(0.5)
+    PHASE_HEADER_HEIGHT = Inches(0.7)
+    ITEM_HEIGHT_ESTIMATE = Inches(0.5)  # Estimated height per workpackage item
+    MIN_ITEM_HEIGHT = Inches(0.3)
+    MAX_CONTENT_HEIGHT = config.SLIDE_HEIGHT - config.CONTENT_TOP_MARGIN - config.BOTTOM_MARGIN
     
     # Group by Timeline
     grouped = roadmap_df.groupby('Timeline')
     
     for timeline, group in grouped:
-        slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
-        
-        # Set background
-        background = slide.background
-        fill = background.fill
-        fill.solid()
-        fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
-        
-        # Add logo
-        if config.LOGO_PATH:
-            add_logo(slide, config.LOGO_PATH, config.LOGO_POSITION)
-        
-        # Slide title (Timeline)
-        title_box = slide.shapes.add_textbox(
-            config.SIDE_MARGIN,
-            Inches(0.5),
-            config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN),
-            Inches(0.8)
-        )
-        title_frame = title_box.text_frame
-        title_frame.text = f"Roadmap: {str(timeline)}"
-        title_para = title_frame.paragraphs[0]
-        title_para.font.name = config.TITLE_FONT_NAME
-        title_para.font.size = config.HEADING_FONT_SIZE
-        title_para.font.bold = True
-        title_para.font.color.rgb = config.BRAND_PRIMARY_COLOR
-        
         # Group by Phase within this timeline
-        phase_groups = group.groupby('Phase') if 'Phase' in group.columns else [(None, group)]
+        phase_groups = list(group.groupby('Phase') if 'Phase' in group.columns else [(None, group)])
+        num_phases = len(phase_groups)
         
-        y_pos = config.CONTENT_TOP_MARGIN
-        max_width = (config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN)) / len(phase_groups) if len(phase_groups) > 1 else (config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN))
+        # Calculate layout dimensions
+        max_width = (config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN)) / num_phases if num_phases > 1 else (config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN))
         box_width = max_width - Inches(0.2)
         
-        for phase_idx, (phase, phase_data) in enumerate(phase_groups):
-            x_pos = config.SIDE_MARGIN + (phase_idx * max_width) + Inches(0.1)
-            
-            # Phase header
-            if phase and str(phase).strip():
-                phase_title = slide.shapes.add_textbox(
-                    x_pos,
-                    y_pos,
-                    box_width,
-                    Inches(0.6)
-                )
-                phase_title_frame = phase_title.text_frame
-                phase_title_frame.text = str(phase)
-                phase_title_para = phase_title_frame.paragraphs[0]
-                phase_title_para.font.name = config.BODY_FONT_NAME
-                phase_title_para.font.size = Pt(22)
-                phase_title_para.font.bold = True
-                phase_title_para.font.color.rgb = config.BRAND_SECONDARY_COLOR
-                y_pos_phase = y_pos + Inches(0.7)
-            else:
-                y_pos_phase = y_pos
-            
-            # Workpackages for this phase
+        # Organize workpackages by phase with pagination info
+        phase_data_list = []
+        for phase, phase_data in phase_groups:
             workpackages = phase_data['Workpackage'].dropna().tolist()
+            phase_data_list.append({
+                'phase': phase,
+                'workpackages': workpackages,
+                'total_items': len(workpackages)
+            })
+        
+        # Calculate how many items can fit per slide
+        available_height = MAX_CONTENT_HEIGHT - PHASE_HEADER_HEIGHT
+        items_per_slide = max(1, int(available_height / ITEM_HEIGHT_ESTIMATE))
+        
+        # Determine if we need multiple slides
+        max_items_any_phase = max([pd['total_items'] for pd in phase_data_list], default=0)
+        slides_needed = max(1, (max_items_any_phase + items_per_slide - 1) // items_per_slide)
+        
+        # Create slides for this timeline
+        for slide_num in range(slides_needed):
+            slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
             
-            if workpackages:
-                # Create content box for workpackages
-                content_height = min(Inches(4), len(workpackages) * Inches(0.8) + Inches(0.3))
+            # Set background
+            background = slide.background
+            fill = background.fill
+            fill.solid()
+            fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
+            
+            # Add logo
+            if config.LOGO_PATH:
+                add_logo(slide, config.LOGO_PATH, config.LOGO_POSITION)
+            
+            # Slide title (Timeline) - add page number if multiple slides
+            title_text = f"Roadmap: {str(timeline)}"
+            if slides_needed > 1:
+                title_text += f" (Page {slide_num + 1} of {slides_needed})"
+            
+            title_box = slide.shapes.add_textbox(
+                config.SIDE_MARGIN,
+                SLIDE_TITLE_TOP,
+                config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN),
+                SLIDE_TITLE_HEIGHT
+            )
+            title_frame = title_box.text_frame
+            title_frame.text = title_text
+            title_para = title_frame.paragraphs[0]
+            title_para.font.name = config.TITLE_FONT_NAME
+            title_para.font.size = config.HEADING_FONT_SIZE
+            title_para.font.bold = True
+            title_para.font.color.rgb = config.BRAND_PRIMARY_COLOR
+            
+            y_pos = config.CONTENT_TOP_MARGIN
+            
+            # Add content for each phase
+            for phase_idx, phase_info in enumerate(phase_data_list):
+                phase = phase_info['phase']
+                workpackages = phase_info['workpackages']
                 
-                if config.USE_SHAPES:
-                    shape = slide.shapes.add_shape(
-                        MSO_SHAPE.ROUNDED_RECTANGLE,
+                # Calculate which items to show on this slide
+                start_idx = slide_num * items_per_slide
+                end_idx = min(start_idx + items_per_slide, len(workpackages))
+                
+                items_for_this_slide = workpackages[start_idx:end_idx] if start_idx < len(workpackages) else []
+                
+                x_pos = config.SIDE_MARGIN + (phase_idx * max_width) + Inches(0.1)
+                
+                # Phase header - always show if phase name exists
+                if phase and str(phase).strip():
+                    phase_title = slide.shapes.add_textbox(
                         x_pos,
-                        y_pos_phase,
+                        y_pos,
                         box_width,
-                        content_height
+                        Inches(0.6)
                     )
-                    shape.fill.solid()
-                    shape.fill.fore_color.rgb = config.CONTENT_BOX_COLOR
-                    shape.line.color.rgb = config.BRAND_ACCENT_COLOR
-                    shape.line.width = Pt(1.5)
-                    
-                    text_frame = shape.text_frame
-                    text_frame.word_wrap = True
-                    text_frame.margin_left = Inches(0.15)
-                    text_frame.margin_right = Inches(0.15)
-                    text_frame.margin_top = Inches(0.15)
-                    text_frame.margin_bottom = Inches(0.15)
-                    
-                    for i, wp in enumerate(workpackages):
-                        if i > 0:
-                            text_frame.add_paragraph()
-                        para = text_frame.paragraphs[i]
-                        para.text = f"• {str(wp)}"
-                        para.font.name = config.BODY_FONT_NAME
-                        para.font.size = Pt(14)
-                        para.font.color.rgb = config.BRAND_TEXT_COLOR
-                        para.space_after = Pt(6)
+                    phase_title_frame = phase_title.text_frame
+                    phase_title_frame.text = str(phase)
+                    phase_title_para = phase_title_frame.paragraphs[0]
+                    phase_title_para.font.name = config.BODY_FONT_NAME
+                    phase_title_para.font.size = Pt(22)
+                    phase_title_para.font.bold = True
+                    phase_title_para.font.color.rgb = config.BRAND_SECONDARY_COLOR
+                    y_pos_phase = y_pos + PHASE_HEADER_HEIGHT
                 else:
-                    wp_box = slide.shapes.add_textbox(
-                        x_pos,
-                        y_pos_phase,
-                        box_width,
-                        content_height
+                    y_pos_phase = y_pos
+                
+                # Only show content box if there are items for this slide
+                if items_for_this_slide:
+                    # Calculate content height based on number of items
+                    content_height = min(
+                        MAX_CONTENT_HEIGHT - (y_pos_phase - config.CONTENT_TOP_MARGIN),
+                        max(MIN_ITEM_HEIGHT, len(items_for_this_slide) * ITEM_HEIGHT_ESTIMATE + Inches(0.3))
                     )
-                    wp_frame = wp_box.text_frame
-                    wp_frame.word_wrap = True
-                    
-                    for i, wp in enumerate(workpackages):
-                        if i > 0:
-                            wp_frame.add_paragraph()
-                        para = wp_frame.paragraphs[i]
-                        para.text = f"• {str(wp)}"
-                        para.font.name = config.BODY_FONT_NAME
-                        para.font.size = Pt(14)
-                        para.font.color.rgb = config.BRAND_TEXT_COLOR
-                        para.space_after = Pt(6)
+                    if config.USE_SHAPES:
+                        shape = slide.shapes.add_shape(
+                            MSO_SHAPE.ROUNDED_RECTANGLE,
+                            x_pos,
+                            y_pos_phase,
+                            box_width,
+                            content_height
+                        )
+                        shape.fill.solid()
+                        shape.fill.fore_color.rgb = config.CONTENT_BOX_COLOR
+                        shape.line.color.rgb = config.BRAND_ACCENT_COLOR
+                        shape.line.width = Pt(1.5)
+                        
+                        text_frame = shape.text_frame
+                        text_frame.word_wrap = True
+                        text_frame.margin_left = Inches(0.15)
+                        text_frame.margin_right = Inches(0.15)
+                        text_frame.margin_top = Inches(0.15)
+                        text_frame.margin_bottom = Inches(0.15)
+                        
+                        for i, wp in enumerate(items_for_this_slide):
+                            if i > 0:
+                                text_frame.add_paragraph()
+                            para = text_frame.paragraphs[i]
+                            para.text = f"• {str(wp)}"
+                            para.font.name = config.BODY_FONT_NAME
+                            para.font.size = Pt(14)
+                            para.font.color.rgb = config.BRAND_TEXT_COLOR
+                            para.space_after = Pt(6)
+                    else:
+                        wp_box = slide.shapes.add_textbox(
+                            x_pos,
+                            y_pos_phase,
+                            box_width,
+                            content_height
+                        )
+                        wp_frame = wp_box.text_frame
+                        wp_frame.word_wrap = True
+                        
+                        for i, wp in enumerate(items_for_this_slide):
+                            if i > 0:
+                                wp_frame.add_paragraph()
+                            para = wp_frame.paragraphs[i]
+                            para.text = f"• {str(wp)}"
+                            para.font.name = config.BODY_FONT_NAME
+                            para.font.size = Pt(14)
+                            para.font.color.rgb = config.BRAND_TEXT_COLOR
+                            para.space_after = Pt(6)
 
 
 def generate_presentation(excel_file, output_path=None):
