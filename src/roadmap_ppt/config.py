@@ -57,11 +57,11 @@ TEMPLATE_SLIDE_INDEX = 0  # Which slide from template to use (0 = first slide)
 # OVERVIEW SLIDE CONFIG
 OVERVIEW_TIMELINE_SHAPE_COLOR = RGBColor(0, 51, 102)  # Timeline shape fill color
 OVERVIEW_TIMELINE_TEXT_COLOR = RGBColor(255, 255, 255)  # Timeline text color (should contrast with shape color)
-OVERVIEW_CHEVRON_COLOR = RGBColor(255, 153, 0)  # Chevron connector color
-OVERVIEW_SHAPE_HEIGHT = Inches(1.0)  # Height of timeline shapes
-OVERVIEW_SHAPE_WIDTH = Inches(1.75)  # Width of timeline shapes
-OVERVIEW_CHEVRON_WIDTH = Inches(2.0)  # Width of chevron connectors
-OVERVIEW_CHEVRON_HEIGHT = Inches(1.0)  # Height of chevron connectors
+OVERVIEW_CHEVRON_COLOR = RGBColor(255, 153, 0)  # Chevron connector color (kept for potential future use)
+OVERVIEW_SHAPE_HEIGHT = Inches(1.3)  # Height of timeline shapes (increased from 1.0)
+OVERVIEW_SHAPE_WIDTH = Inches(2.2)  # Width of timeline shapes (increased from 1.75)
+OVERVIEW_CHEVRON_WIDTH = Inches(2.0)  # Width of chevron connectors (kept for potential future use)
+OVERVIEW_CHEVRON_HEIGHT = Inches(1.0)  # Height of chevron connectors (kept for potential future use)
 
 ################################################################################
 ### END CONFIGURATION SECTION ###

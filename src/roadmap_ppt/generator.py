@@ -582,6 +582,7 @@ def create_objectives_slide(prs, objectives_data):
                 para.font.name = config.BODY_FONT_NAME
                 para.font.size = config.BODY_FONT_SIZE
                 para.font.color.rgb = config.BRAND_TEXT_COLOR
+                para.alignment = PP_ALIGN.LEFT
             else:
                 north_star_content = slide.shapes.add_textbox(
                     config.SIDE_MARGIN,
@@ -596,6 +597,7 @@ def create_objectives_slide(prs, objectives_data):
                 north_star_content_para.font.name = config.BODY_FONT_NAME
                 north_star_content_para.font.size = config.BODY_FONT_SIZE
                 north_star_content_para.font.color.rgb = config.BRAND_TEXT_COLOR
+                north_star_content_para.alignment = PP_ALIGN.LEFT
             
             y_pos += dynamic_height + Inches(0.3)
         
@@ -645,6 +647,7 @@ def create_objectives_slide(prs, objectives_data):
                 para.font.color.rgb = config.BRAND_TEXT_COLOR
                 para.space_after = Pt(8)
                 para.level = 0
+                para.alignment = PP_ALIGN.LEFT
 
 
 def create_timeline_overview_slide(prs, roadmap_df):
@@ -718,16 +721,14 @@ def create_timeline_overview_slide(prs, roadmap_df):
     if not timeline_phase_items:
         return
     
-    # Calculate layout dimensions using config
-    shape_width = config.OVERVIEW_SHAPE_WIDTH
-    shape_height = config.OVERVIEW_SHAPE_HEIGHT
-    chevron_width = config.OVERVIEW_CHEVRON_WIDTH
-    chevron_height = config.OVERVIEW_CHEVRON_HEIGHT
+    # Calculate layout dimensions using config (increased size)
+    shape_width = config.OVERVIEW_SHAPE_WIDTH * 1.25  # Make 25% larger
+    shape_height = config.OVERVIEW_SHAPE_HEIGHT * 1.25  # Make 25% larger
+    overlap_amount = Inches(0.6)  # Amount pentagons overlap to fit into each other
     
-    # Calculate total width needed
+    # Calculate total width needed (accounting for overlap)
     total_items = len(timeline_phase_items)
-    total_chevrons = total_items - 1
-    total_width = total_items * shape_width + total_chevrons * (chevron_width - Inches(0.4))
+    total_width = (total_items * shape_width) - (overlap_amount * (total_items - 1))
     
     # Start position (centered)
     available_width = config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN)
@@ -736,7 +737,7 @@ def create_timeline_overview_slide(prs, roadmap_df):
     
     current_x = start_x
     
-    # Draw timeline shapes with phase subtext and chevrons
+    # Draw timeline shapes fitting into each other
     for i, item in enumerate(timeline_phase_items):
         timeline = item['timeline']
         phase = item['phase']
@@ -788,24 +789,8 @@ def create_timeline_overview_slide(prs, roadmap_df):
             phase_para.font.color.rgb = config.OVERVIEW_TIMELINE_TEXT_COLOR
             phase_para.alignment = PP_ALIGN.CENTER
         
-        current_x += shape_width - Inches(0.4)  # Overlap chevron slightly
-        
-        # Chevron connector after timeline (if not last item)
-        if i < len(timeline_phase_items) - 1:
-            chevron_x = current_x
-            chevron_y = y_pos
-            chevron_shape = slide.shapes.add_shape(
-                MSO_SHAPE.CHEVRON,
-                chevron_x,
-                chevron_y,
-                chevron_width,
-                chevron_height
-            )
-            chevron_shape.fill.solid()
-            chevron_shape.fill.fore_color.rgb = config.OVERVIEW_CHEVRON_COLOR
-            chevron_shape.line.color.rgb = config.OVERVIEW_CHEVRON_COLOR
-            
-            current_x += chevron_width - Inches(0.4)  # Overlap next shape slightly
+        # Move to next position with overlap (fit into next shape)
+        current_x += shape_width - overlap_amount
 
 
 def create_roadmap_slides(prs, roadmap_df):
@@ -931,6 +916,7 @@ def create_roadmap_slides(prs, roadmap_df):
                     phase_title_para.font.size = Pt(22)
                     phase_title_para.font.bold = True
                     phase_title_para.font.color.rgb = config.BRAND_SECONDARY_COLOR
+                    phase_title_para.alignment = PP_ALIGN.LEFT
                     y_pos_phase = y_pos + PHASE_HEADER_HEIGHT
                 else:
                     y_pos_phase = y_pos
@@ -971,6 +957,7 @@ def create_roadmap_slides(prs, roadmap_df):
                             para.font.size = Pt(14)
                             para.font.color.rgb = config.BRAND_TEXT_COLOR
                             para.space_after = Pt(6)
+                            para.alignment = PP_ALIGN.LEFT
                     else:
                         wp_box = slide.shapes.add_textbox(
                             x_pos,
@@ -990,6 +977,7 @@ def create_roadmap_slides(prs, roadmap_df):
                             para.font.size = Pt(14)
                             para.font.color.rgb = config.BRAND_TEXT_COLOR
                             para.space_after = Pt(6)
+                            para.alignment = PP_ALIGN.LEFT
 
 
 def generate_presentation(excel_file, output_path=None):
