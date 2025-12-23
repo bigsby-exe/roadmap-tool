@@ -133,6 +133,48 @@ def add_logo(slide, logo_path, position):
         print(f"Warning: Could not add logo: {e}")
 
 
+def calculate_text_height(text, width, font_size, min_height=None, max_height=None):
+    """
+    Calculate estimated height needed for text based on content length and width.
+    
+    Args:
+        text: Text content
+        width: Available width in inches
+        font_size: Font size in points
+        min_height: Minimum height in inches (optional)
+        max_height: Maximum height in inches (optional)
+    
+    Returns:
+        Estimated height in inches
+    """
+    if not text:
+        return min_height or Inches(0.5)
+    
+    # Estimate characters per line based on width and font size
+    # Rough estimate: 1 inch ≈ 12 characters at 18pt font
+    chars_per_inch = max(8, 12 * (18 / font_size.pt))
+    chars_per_line = int(width / Inches(1) * chars_per_inch)
+    
+    # Calculate estimated lines
+    text_length = len(str(text))
+    estimated_lines = max(1, (text_length // chars_per_line) + 1)
+    
+    # Add some buffer for word wrapping
+    estimated_lines = int(estimated_lines * 1.2)
+    
+    # Calculate height (roughly 1.2x font size per line)
+    line_height = font_size.pt * 1.2 / 72  # Convert points to inches
+    estimated_height = Inches(estimated_lines * line_height)
+    
+    # Apply min/max constraints
+    if min_height and estimated_height < min_height:
+        estimated_height = min_height
+    if max_height and estimated_height > max_height:
+        estimated_height = max_height
+    
+    return estimated_height
+
+
 def create_title_slide(prs, objectives_data):
     """Create title slide with branding."""
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
@@ -182,135 +224,201 @@ def create_title_slide(prs, objectives_data):
 
 
 def create_objectives_slide(prs, objectives_data):
-    """Create objectives slide displaying North star and key elements."""
-    slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
+    """Create objectives slide(s) displaying North star and key elements with pagination."""
+    key_elements = objectives_data.get('key_elements', [])
+    has_north_star = bool(objectives_data.get('north_star'))
     
-    # Set background
-    background = slide.background
-    fill = background.fill
-    fill.solid()
-    fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
+    # Calculate available space for key elements
+    # Account for: slide title, north star section (if present), key elements title
+    SLIDE_TITLE_HEIGHT = Inches(0.8)
+    SLIDE_TITLE_TOP = Inches(0.5)
+    KEY_ELEMENTS_TITLE_HEIGHT = Inches(0.6)
+    KEY_ELEMENTS_TITLE_SPACING = Inches(0.8)
     
-    # Add logo
-    if config.LOGO_PATH:
-        add_logo(slide, config.LOGO_PATH, config.LOGO_POSITION)
+    # Calculate space after North Star (if present)
+    if has_north_star:
+        north_star_text = str(objectives_data['north_star'])
+        box_width = config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN) - (2 * config.TEXT_BOX_MARGIN)
+        north_star_height = calculate_text_height(
+            north_star_text,
+            box_width,
+            config.BODY_FONT_SIZE,
+            min_height=config.NORTH_STAR_MIN_HEIGHT,
+            max_height=config.NORTH_STAR_MAX_HEIGHT
+        )
+        space_after_north_star = Inches(1.2) + north_star_height + Inches(0.3)  # Header + content + spacing
+    else:
+        space_after_north_star = 0
     
-    # Slide title
-    title_box = slide.shapes.add_textbox(
-        config.SIDE_MARGIN,
-        Inches(0.5),
-        config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN),
-        Inches(0.8)
+    # Calculate available height for key elements
+    available_height = (
+        config.SLIDE_HEIGHT 
+        - SLIDE_TITLE_TOP 
+        - SLIDE_TITLE_HEIGHT 
+        - space_after_north_star
+        - KEY_ELEMENTS_TITLE_HEIGHT 
+        - KEY_ELEMENTS_TITLE_SPACING
+        - config.BOTTOM_MARGIN
     )
-    title_frame = title_box.text_frame
-    title_frame.text = "Objectives"
-    title_para = title_frame.paragraphs[0]
-    title_para.font.name = config.TITLE_FONT_NAME
-    title_para.font.size = config.HEADING_FONT_SIZE
-    title_para.font.bold = True
-    title_para.font.color.rgb = config.BRAND_PRIMARY_COLOR
     
-    # North Star section
-    y_pos = config.CONTENT_TOP_MARGIN
+    # Calculate how many key elements fit per slide
+    items_per_slide = max(1, int(available_height / config.KEY_ELEMENT_HEIGHT_ESTIMATE))
+    total_elements = len(key_elements)
+    slides_needed = max(1, (total_elements + items_per_slide - 1) // items_per_slide) if total_elements > 0 else 1
     
-    if objectives_data.get('north_star'):
-        north_star_box = slide.shapes.add_textbox(
+    # Create slides
+    for slide_num in range(slides_needed):
+        slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
+        
+        # Set background
+        background = slide.background
+        fill = background.fill
+        fill.solid()
+        fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
+        
+        # Add logo
+        if config.LOGO_PATH:
+            add_logo(slide, config.LOGO_PATH, config.LOGO_POSITION)
+        
+        # Slide title - add page number if multiple slides
+        title_text = "Objectives"
+        if slides_needed > 1:
+            title_text += f" (Page {slide_num + 1} of {slides_needed})"
+        
+        title_box = slide.shapes.add_textbox(
             config.SIDE_MARGIN,
-            y_pos,
+            SLIDE_TITLE_TOP,
             config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN),
-            Inches(1)
+            SLIDE_TITLE_HEIGHT
         )
-        north_star_frame = north_star_box.text_frame
-        north_star_frame.text = "North Star"
-        north_star_para = north_star_frame.paragraphs[0]
-        north_star_para.font.name = config.BODY_FONT_NAME
-        north_star_para.font.size = Pt(24)
-        north_star_para.font.bold = True
-        north_star_para.font.color.rgb = config.BRAND_SECONDARY_COLOR
+        title_frame = title_box.text_frame
+        title_frame.text = title_text
+        title_para = title_frame.paragraphs[0]
+        title_para.font.name = config.TITLE_FONT_NAME
+        title_para.font.size = config.HEADING_FONT_SIZE
+        title_para.font.bold = True
+        title_para.font.color.rgb = config.BRAND_PRIMARY_COLOR
         
-        y_pos += Inches(1.2)
+        y_pos = config.CONTENT_TOP_MARGIN
         
-        # North star content box
-        if config.USE_SHAPES:
-            shape = slide.shapes.add_shape(
-                MSO_SHAPE.ROUNDED_RECTANGLE,
+        # North Star section - only show on first slide
+        if has_north_star and slide_num == 0:
+            north_star_box = slide.shapes.add_textbox(
                 config.SIDE_MARGIN,
                 y_pos,
                 config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN),
-                Inches(1.2)
+                Inches(1)
             )
-            shape.fill.solid()
-            shape.fill.fore_color.rgb = config.CONTENT_BOX_COLOR
-            shape.line.color.rgb = config.BRAND_SECONDARY_COLOR
-            shape.line.width = Pt(2)
+            north_star_frame = north_star_box.text_frame
+            north_star_frame.text = "North Star"
+            north_star_para = north_star_frame.paragraphs[0]
+            north_star_para.font.name = config.BODY_FONT_NAME
+            north_star_para.font.size = Pt(24)
+            north_star_para.font.bold = True
+            north_star_para.font.color.rgb = config.BRAND_SECONDARY_COLOR
             
-            text_frame = shape.text_frame
-            text_frame.text = objectives_data['north_star']
-            text_frame.word_wrap = True
-            text_frame.margin_left = Inches(0.2)
-            text_frame.margin_right = Inches(0.2)
-            text_frame.margin_top = Inches(0.1)
-            text_frame.margin_bottom = Inches(0.1)
+            y_pos += Inches(1.2)
             
-            para = text_frame.paragraphs[0]
-            para.font.name = config.BODY_FONT_NAME
-            para.font.size = config.BODY_FONT_SIZE
-            para.font.color.rgb = config.BRAND_TEXT_COLOR
-        else:
-            north_star_content = slide.shapes.add_textbox(
+            # Calculate dynamic height for North Star content box
+            north_star_text = str(objectives_data['north_star'])
+            box_width = config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN) - (2 * config.TEXT_BOX_MARGIN)
+            dynamic_height = calculate_text_height(
+                north_star_text,
+                box_width,
+                config.BODY_FONT_SIZE,
+                min_height=config.NORTH_STAR_MIN_HEIGHT,
+                max_height=config.NORTH_STAR_MAX_HEIGHT
+            )
+            
+            # North star content box
+            if config.USE_SHAPES:
+                shape = slide.shapes.add_shape(
+                    MSO_SHAPE.ROUNDED_RECTANGLE,
+                    config.SIDE_MARGIN,
+                    y_pos,
+                    config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN),
+                    dynamic_height
+                )
+                shape.fill.solid()
+                shape.fill.fore_color.rgb = config.CONTENT_BOX_COLOR
+                shape.line.color.rgb = config.BRAND_SECONDARY_COLOR
+                shape.line.width = Pt(2)
+                
+                text_frame = shape.text_frame
+                text_frame.text = north_star_text
+                text_frame.word_wrap = True
+                text_frame.margin_left = config.TEXT_BOX_MARGIN
+                text_frame.margin_right = config.TEXT_BOX_MARGIN
+                text_frame.margin_top = Inches(0.1)
+                text_frame.margin_bottom = Inches(0.1)
+                
+                para = text_frame.paragraphs[0]
+                para.font.name = config.BODY_FONT_NAME
+                para.font.size = config.BODY_FONT_SIZE
+                para.font.color.rgb = config.BRAND_TEXT_COLOR
+            else:
+                north_star_content = slide.shapes.add_textbox(
+                    config.SIDE_MARGIN,
+                    y_pos,
+                    config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN),
+                    dynamic_height
+                )
+                north_star_content_frame = north_star_content.text_frame
+                north_star_content_frame.text = north_star_text
+                north_star_content_frame.word_wrap = True
+                north_star_content_para = north_star_content_frame.paragraphs[0]
+                north_star_content_para.font.name = config.BODY_FONT_NAME
+                north_star_content_para.font.size = config.BODY_FONT_SIZE
+                north_star_content_para.font.color.rgb = config.BRAND_TEXT_COLOR
+            
+            y_pos += dynamic_height + Inches(0.3)
+        
+        # Key Elements section
+        if total_elements > 0:
+            key_elements_title = slide.shapes.add_textbox(
                 config.SIDE_MARGIN,
                 y_pos,
                 config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN),
-                Inches(1.2)
+                KEY_ELEMENTS_TITLE_HEIGHT
             )
-            north_star_content_frame = north_star_content.text_frame
-            north_star_content_frame.text = objectives_data['north_star']
-            north_star_content_para = north_star_content_frame.paragraphs[0]
-            north_star_content_para.font.name = config.BODY_FONT_NAME
-            north_star_content_para.font.size = config.BODY_FONT_SIZE
-            north_star_content_para.font.color.rgb = config.BRAND_TEXT_COLOR
-            north_star_content_frame.word_wrap = True
-        
-        y_pos += Inches(1.5)
-    
-    # Key Elements section
-    if objectives_data.get('key_elements') and len(objectives_data['key_elements']) > 0:
-        key_elements_title = slide.shapes.add_textbox(
-            config.SIDE_MARGIN,
-            y_pos,
-            config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN),
-            Inches(0.6)
-        )
-        key_elements_title_frame = key_elements_title.text_frame
-        key_elements_title_frame.text = "Key Elements"
-        key_elements_title_para = key_elements_title_frame.paragraphs[0]
-        key_elements_title_para.font.name = config.BODY_FONT_NAME
-        key_elements_title_para.font.size = Pt(24)
-        key_elements_title_para.font.bold = True
-        key_elements_title_para.font.color.rgb = config.BRAND_SECONDARY_COLOR
-        
-        y_pos += Inches(0.8)
-        
-        # Key elements list
-        elements_box = slide.shapes.add_textbox(
-            config.SIDE_MARGIN + Inches(0.3),
-            y_pos,
-            config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN) - Inches(0.3),
-            config.SLIDE_HEIGHT - y_pos - config.BOTTOM_MARGIN
-        )
-        elements_frame = elements_box.text_frame
-        elements_frame.word_wrap = True
-        
-        for i, element in enumerate(objectives_data['key_elements']):
-            if i > 0:
-                elements_frame.add_paragraph()
-            para = elements_frame.paragraphs[i]
-            para.text = f"• {str(element)}"
-            para.font.name = config.BODY_FONT_NAME
-            para.font.size = config.BODY_FONT_SIZE
-            para.font.color.rgb = config.BRAND_TEXT_COLOR
-            para.space_after = Pt(8)
-            para.level = 0
+            key_elements_title_frame = key_elements_title.text_frame
+            key_elements_title_frame.text = "Key Elements"
+            key_elements_title_para = key_elements_title_frame.paragraphs[0]
+            key_elements_title_para.font.name = config.BODY_FONT_NAME
+            key_elements_title_para.font.size = Pt(24)
+            key_elements_title_para.font.bold = True
+            key_elements_title_para.font.color.rgb = config.BRAND_SECONDARY_COLOR
+            
+            y_pos += KEY_ELEMENTS_TITLE_SPACING
+            
+            # Calculate which elements to show on this slide
+            start_idx = slide_num * items_per_slide
+            end_idx = min(start_idx + items_per_slide, total_elements)
+            elements_for_slide = key_elements[start_idx:end_idx]
+            
+            # Calculate available height for elements list
+            elements_height = config.SLIDE_HEIGHT - y_pos - config.BOTTOM_MARGIN
+            
+            # Key elements list
+            elements_box = slide.shapes.add_textbox(
+                config.SIDE_MARGIN + Inches(0.3),
+                y_pos,
+                config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN) - Inches(0.3),
+                elements_height
+            )
+            elements_frame = elements_box.text_frame
+            elements_frame.word_wrap = True
+            
+            for i, element in enumerate(elements_for_slide):
+                if i > 0:
+                    elements_frame.add_paragraph()
+                para = elements_frame.paragraphs[i]
+                para.text = f"• {str(element)}"
+                para.font.name = config.BODY_FONT_NAME
+                para.font.size = config.BODY_FONT_SIZE
+                para.font.color.rgb = config.BRAND_TEXT_COLOR
+                para.space_after = Pt(8)
+                para.level = 0
 
 
 def create_roadmap_slides(prs, roadmap_df):
@@ -414,6 +522,7 @@ def create_roadmap_slides(prs, roadmap_df):
                     )
                     phase_title_frame = phase_title.text_frame
                     phase_title_frame.text = str(phase)
+                    phase_title_frame.word_wrap = True  # Ensure phase titles wrap if too long
                     phase_title_para = phase_title_frame.paragraphs[0]
                     phase_title_para.font.name = config.BODY_FONT_NAME
                     phase_title_para.font.size = Pt(22)

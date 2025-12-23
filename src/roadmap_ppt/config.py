@@ -42,6 +42,13 @@ USE_SHAPES = True  # Use rounded rectangles for content boxes
 SHAPE_CORNER_RADIUS = Inches(0.1)
 CONTENT_BOX_COLOR = RGBColor(245, 245, 245)  # Light gray for content boxes
 
+# PAGINATION CONFIG
+KEY_ELEMENT_HEIGHT_ESTIMATE = Inches(0.5)  # Estimated height per key element item
+NORTH_STAR_MIN_HEIGHT = Inches(0.8)  # Minimum height for north star box
+NORTH_STAR_MAX_HEIGHT = Inches(3.0)  # Maximum height for north star box
+TEXT_BOX_MARGIN = Inches(0.2)  # Consistent margin for text boxes
+CHARS_PER_LINE_ESTIMATE = 80  # Estimated characters per line for text wrapping
+
 ################################################################################
 ### END CONFIGURATION SECTION ###
 ################################################################################
