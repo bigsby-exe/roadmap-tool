@@ -5,10 +5,13 @@ A Python script that automatically converts Excel roadmap data into a profession
 ## Features
 
 - **Automatic PowerPoint Generation**: Converts Excel roadmap data into a polished presentation
-- **Brandable Design**: Fully customizable colors, fonts, logos, and styling
+- **Brandable Design**: Fully customizable colors, fonts, logos, and styling via user config file
 - **Smart Data Parsing**: Automatically detects columns in your Excel sheets (case-insensitive)
-- **Organized Slides**: Creates multiple slides grouped by timeline/phase
+- **Organized Slides**: Creates multiple slides grouped by timeline/phase with automatic pagination
+- **Timeline Overview**: Visual roadmap flow slide showing timeline steps and phases
+- **Template Support**: Use PowerPoint templates for consistent corporate branding
 - **Professional Layout**: Modern design with rounded rectangles, proper spacing, and visual hierarchy
+- **Automatic Title**: Title slide automatically uses your Excel filename
 
 ## Installation
 
@@ -96,14 +99,17 @@ roadmap-ppt your_roadmap.xlsx -o my_presentation.pptx
 
 The tool will create `your_roadmap.pptx` in the same directory as your Excel file (unless `-o` is specified).
 
+**Note**: The title slide automatically uses your Excel filename (without extension) as the presentation title. For example, if your Excel file is `m365 roadmap.xlsx`, the title will be "m365 roadmap".
+
 ## Customization
 
-All branding and styling options are located in `src/roadmap_ppt/config.py` in the **CONFIGURATION SECTION**. Edit these values to match your corporate branding:
+All branding and styling options are located in your home directory at `~/.roadmap_ppt/config.py` (Windows: `%USERPROFILE%\.roadmap_ppt\config.py`). 
 
-**Note**: After modifying the config file, you'll need to reinstall the tool:
-```bash
-uv tool install .
-```
+**First Run**: The config file is automatically created on first run with default settings. You can then edit it to customize your branding.
+
+**No Reinstallation Needed**: Changes to the config file take effect immediately - no need to reinstall the tool!
+
+Edit the config file to match your corporate branding:
 
 ### Colors
 
@@ -164,23 +170,44 @@ CONTENT_BOX_COLOR = RGBColor(245, 245, 245)  # Color for content boxes
 
 Set `USE_SHAPES = False` for a simpler text-only layout.
 
+### Slide Templates
+
+```python
+TITLE_SLIDE_TEMPLATE = "templates/title_template.pptx"  # Path to title slide template (or None)
+CONTENT_SLIDE_TEMPLATE = "templates/content_template.pptx"  # Path to content slide template (or None)
+TEMPLATE_SLIDE_INDEX = 0  # Which slide from template to use (0 = first slide)
+```
+
+Templates allow you to use existing PowerPoint files (.pptx or .potx) as the base for generated slides. The tool will copy the template slide and add content on top, preserving your corporate design while maintaining automatic content generation.
+
 ## Output Structure
 
 The generated PowerPoint presentation includes:
 
 1. **Title Slide**
-   - Presentation title
+   - Presentation title (automatically uses Excel filename)
    - North star objective as subtitle
    - Logo (if configured)
+   - Template support (if configured)
 
-2. **Objectives Slide**
-   - North star prominently displayed
+2. **Objectives Slide(s)**
+   - North star prominently displayed with dynamic height
    - Key elements listed as bullet points
+   - Automatically paginated if there are many key elements
+   - Template support (if configured)
 
-3. **Roadmap Slides** (one per timeline)
-   - Timeline as slide title
+3. **Timeline Overview Slide**
+   - Visual flow showing all timeline steps and phases
+   - Horizontal layout: Timeline > Phase > Timeline > Phase
+   - Connected with arrow shapes
+   - Provides overview before detailed roadmap slides
+
+4. **Roadmap Slides** (one or more per timeline)
+   - Timeline as slide title with page numbers (if multiple slides)
    - Content organized by phase (if phases are used)
    - Workpackages displayed as bullet points in organized boxes
+   - Automatically paginated when content exceeds slide capacity
+   - Template support (if configured)
 
 ## Examples
 
@@ -243,15 +270,19 @@ roadmap-ppt my_company_roadmap_2024.xlsx -o company_presentation.pptx
 roadmap/
 ├── src/
 │   └── roadmap_ppt/
-│       ├── __init__.py    # Package initialization
-│       ├── config.py      # Configuration (BRANDING - edit here!)
-│       ├── generator.py   # Core PowerPoint generation logic
-│       └── cli.py          # Command-line interface
-├── main.py                # Backward compatibility wrapper
-├── pyproject.toml         # Package configuration
-├── requirements.txt       # Python dependencies
-├── README.md              # This file
-└── your_roadmap.xlsx      # Your Excel file (example)
+│       ├── __init__.py         # Package initialization
+│       ├── config.py           # Default configuration template
+│       ├── config_loader.py    # Config loader for user directory
+│       ├── generator.py        # Core PowerPoint generation logic
+│       └── cli.py              # Command-line interface
+├── main.py                     # Backward compatibility wrapper
+├── pyproject.toml              # Package configuration
+├── requirements.txt            # Python dependencies
+├── README.md                   # This file
+└── your_roadmap.xlsx           # Your Excel file (example)
+
+User Configuration:
+~/.roadmap_ppt/config.py         # Your custom configuration (created on first run)
 ```
 
 ## License
@@ -263,5 +294,14 @@ This script is provided as-is for your use. Feel free to modify and customize as
 For issues or questions:
 1. Check the Troubleshooting section above
 2. Verify your Excel file format matches the requirements
-3. Review the configuration section in `src/roadmap_ppt/config.py` for customization options
+3. Review and edit your configuration file at `~/.roadmap_ppt/config.py` for customization options
+4. The config file is created automatically on first run - edit it to customize branding without reinstalling
+
+## Configuration File Location
+
+Your configuration file is stored in your home directory:
+- **Windows**: `%USERPROFILE%\.roadmap_ppt\config.py` (e.g., `C:\Users\YourName\.roadmap_ppt\config.py`)
+- **Mac/Linux**: `~/.roadmap_ppt/config.py`
+
+This file is created automatically on first run with default settings. You can edit it anytime to customize colors, fonts, logos, templates, and other branding options. Changes take effect immediately without reinstalling the tool.
 
