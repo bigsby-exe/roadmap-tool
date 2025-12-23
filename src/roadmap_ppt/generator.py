@@ -11,7 +11,8 @@ from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 import pandas as pd
 
-from . import config
+from . import config_loader
+config = config_loader.config
 
 
 def hex_to_rgb(hex_color):
@@ -316,7 +317,7 @@ def calculate_text_height(text, width, font_size, min_height=None, max_height=No
     return estimated_height
 
 
-def create_title_slide(prs, objectives_data):
+def create_title_slide(prs, objectives_data, title="Roadmap Presentation"):
     """Create title slide with branding."""
     # Try to use template if configured
     template_prs = load_template_slide(config.TITLE_SLIDE_TEMPLATE, config.TEMPLATE_SLIDE_INDEX)
@@ -352,7 +353,7 @@ def create_title_slide(prs, objectives_data):
         Inches(2)
     )
     title_frame = title_box.text_frame
-    title_frame.text = "Roadmap Presentation"
+    title_frame.text = title
     title_para = title_frame.paragraphs[0]
     title_para.font.name = config.TITLE_FONT_NAME
     title_para.font.size = config.TITLE_FONT_SIZE
@@ -592,6 +593,194 @@ def create_objectives_slide(prs, objectives_data):
                 para.level = 0
 
 
+def create_timeline_overview_slide(prs, roadmap_df):
+    """Create timeline overview slide showing horizontal flow of timeline steps and phases."""
+    if roadmap_df.empty:
+        return
+    
+    # Try to use template if configured
+    template_prs = load_template_slide(config.CONTENT_SLIDE_TEMPLATE, config.TEMPLATE_SLIDE_INDEX)
+    
+    if template_prs:
+        slide = create_slide_from_template(prs, template_prs, config.TEMPLATE_SLIDE_INDEX)
+        if slide is None:
+            # Fall back to blank layout if template copy failed
+            slide = prs.slides.add_slide(prs.slide_layouts[6])
+            # Set background
+            background = slide.background
+            fill = background.fill
+            fill.solid()
+            fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
+    else:
+        # Use blank layout
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        
+        # Set background
+        background = slide.background
+        fill = background.fill
+        fill.solid()
+        fill.fore_color.rgb = config.BRAND_BACKGROUND_COLOR
+    
+    # Add logo
+    if config.LOGO_PATH:
+        add_logo(slide, config.LOGO_PATH, config.LOGO_POSITION)
+    
+    # Slide title
+    title_box = slide.shapes.add_textbox(
+        config.SIDE_MARGIN,
+        Inches(0.5),
+        config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN),
+        Inches(0.8)
+    )
+    title_frame = title_box.text_frame
+    title_frame.text = "Roadmap Overview"
+    title_para = title_frame.paragraphs[0]
+    title_para.font.name = config.TITLE_FONT_NAME
+    title_para.font.size = config.HEADING_FONT_SIZE
+    title_para.font.bold = True
+    title_para.font.color.rgb = config.BRAND_PRIMARY_COLOR
+    
+    # Group by Timeline, then collect phases for each timeline
+    timeline_groups = roadmap_df.groupby('Timeline', sort=False)
+    
+    # Collect timeline-phase items in order
+    timeline_phase_items = []
+    for timeline, group in timeline_groups:
+        phases = group['Phase'].dropna().unique().tolist()
+        if len(phases) > 0:
+            for phase in phases:
+                if phase and str(phase).strip():
+                    timeline_phase_items.append({
+                        'timeline': str(timeline),
+                        'phase': str(phase)
+                    })
+        else:
+            # Timeline with no phases
+            timeline_phase_items.append({
+                'timeline': str(timeline),
+                'phase': None
+            })
+    
+    if not timeline_phase_items:
+        return
+    
+    # Calculate layout dimensions
+    ARROW_WIDTH = Inches(0.5)
+    BOX_HEIGHT = Inches(1.5)
+    BOX_WIDTH = Inches(2.2)
+    
+    # Calculate total width needed
+    total_items = len(timeline_phase_items)
+    total_arrows = total_items - 1
+    total_width = total_items * BOX_WIDTH + total_arrows * ARROW_WIDTH
+    
+    # Start position (centered)
+    available_width = config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN)
+    start_x = config.SIDE_MARGIN + (available_width - total_width) / 2 if total_width < available_width else config.SIDE_MARGIN
+    y_pos = config.CONTENT_TOP_MARGIN
+    
+    current_x = start_x
+    
+    # Draw timeline boxes with phase subtext and arrows
+    for i, item in enumerate(timeline_phase_items):
+        timeline = item['timeline']
+        phase = item['phase']
+        
+        # Create text content: Timeline with phase as subtext
+        if phase:
+            box_text = f"{timeline}\n{phase}"
+        else:
+            box_text = timeline
+        
+        # Timeline box with phase subtext
+        if config.USE_SHAPES:
+            timeline_shape = slide.shapes.add_shape(
+                MSO_SHAPE.ROUNDED_RECTANGLE,
+                current_x,
+                y_pos,
+                BOX_WIDTH,
+                BOX_HEIGHT
+            )
+            timeline_shape.fill.solid()
+            timeline_shape.fill.fore_color.rgb = config.BRAND_PRIMARY_COLOR
+            timeline_shape.line.color.rgb = config.BRAND_PRIMARY_COLOR
+            timeline_shape.line.width = Pt(2)
+            
+            timeline_text = timeline_shape.text_frame
+            timeline_text.text = box_text
+            timeline_text.word_wrap = True
+            timeline_text.margin_left = Inches(0.15)
+            timeline_text.margin_right = Inches(0.15)
+            timeline_text.margin_top = Inches(0.1)
+            timeline_text.margin_bottom = Inches(0.1)
+            
+            # Timeline line (bold)
+            timeline_para = timeline_text.paragraphs[0]
+            timeline_para.font.name = config.BODY_FONT_NAME
+            timeline_para.font.size = Pt(18)
+            timeline_para.font.bold = True
+            timeline_para.font.color.rgb = RGBColor(255, 255, 255)  # White text on colored background
+            timeline_para.alignment = PP_ALIGN.CENTER
+            
+            # Phase subtext line (if exists)
+            if phase:
+                if len(timeline_text.paragraphs) < 2:
+                    timeline_text.add_paragraph()
+                phase_para = timeline_text.paragraphs[1]
+                phase_para.text = phase
+                phase_para.font.name = config.BODY_FONT_NAME
+                phase_para.font.size = Pt(12)
+                phase_para.font.bold = False
+                phase_para.font.color.rgb = RGBColor(255, 255, 255)  # White text
+                phase_para.alignment = PP_ALIGN.CENTER
+        else:
+            timeline_box = slide.shapes.add_textbox(
+                current_x,
+                y_pos,
+                BOX_WIDTH,
+                BOX_HEIGHT
+            )
+            timeline_frame = timeline_box.text_frame
+            timeline_frame.text = box_text
+            timeline_frame.word_wrap = True
+            
+            timeline_para = timeline_frame.paragraphs[0]
+            timeline_para.font.name = config.BODY_FONT_NAME
+            timeline_para.font.size = Pt(18)
+            timeline_para.font.bold = True
+            timeline_para.font.color.rgb = config.BRAND_PRIMARY_COLOR
+            timeline_para.alignment = PP_ALIGN.CENTER
+            
+            if phase:
+                if len(timeline_frame.paragraphs) < 2:
+                    timeline_frame.add_paragraph()
+                phase_para = timeline_frame.paragraphs[1]
+                phase_para.text = phase
+                phase_para.font.name = config.BODY_FONT_NAME
+                phase_para.font.size = Pt(12)
+                phase_para.font.color.rgb = config.BRAND_SECONDARY_COLOR
+                phase_para.alignment = PP_ALIGN.CENTER
+        
+        current_x += BOX_WIDTH
+        
+        # Arrow after timeline (if not last item)
+        if i < len(timeline_phase_items) - 1:
+            arrow_x = current_x
+            arrow_y = y_pos + (BOX_HEIGHT / 2) - Inches(0.1)
+            arrow_shape = slide.shapes.add_shape(
+                MSO_SHAPE.RIGHT_ARROW,
+                arrow_x,
+                arrow_y,
+                ARROW_WIDTH,
+                Inches(0.2)
+            )
+            arrow_shape.fill.solid()
+            arrow_shape.fill.fore_color.rgb = config.BRAND_ACCENT_COLOR
+            arrow_shape.line.color.rgb = config.BRAND_ACCENT_COLOR
+            
+            current_x += ARROW_WIDTH
+
+
 def create_roadmap_slides(prs, roadmap_df):
     """Create roadmap slides grouped by timeline/phase with pagination support."""
     if roadmap_df.empty:
@@ -794,6 +983,9 @@ def generate_presentation(excel_file, output_path=None):
         base_name = os.path.splitext(excel_file)[0]
         output_path = f"{base_name}.pptx"
     
+    # Extract Excel filename (without extension) for title
+    excel_filename = os.path.splitext(os.path.basename(excel_file))[0]
+    
     # Read Excel data
     objectives_data = read_objectives(excel_file)
     roadmap_df = read_roadmap(excel_file)
@@ -809,8 +1001,9 @@ def generate_presentation(excel_file, output_path=None):
     
     # Generate slides
     print("Generating slides...")
-    create_title_slide(prs, objectives_data)
+    create_title_slide(prs, objectives_data, title=excel_filename)
     create_objectives_slide(prs, objectives_data)
+    create_timeline_overview_slide(prs, roadmap_df)
     create_roadmap_slides(prs, roadmap_df)
     
     # Save presentation
