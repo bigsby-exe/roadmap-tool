@@ -3,6 +3,7 @@ Core PowerPoint generation functions.
 """
 
 import os
+from io import BytesIO
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN
@@ -183,9 +184,17 @@ def create_slide_from_template(prs, template_prs, slide_index=0):
         
         template_slide = template_prs.slides[slide_index]
         
-        # Copy the slide layout from template
-        slide_layout = template_slide.slide_layout
-        slide = prs.slides.add_slide(slide_layout)
+        # Use blank layout from target presentation (layouts can't be reused across presentations)
+        slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
+        
+        # Copy background from template first
+        try:
+            if hasattr(template_slide.background, 'fill'):
+                if template_slide.background.fill.type == 1:  # Solid fill
+                    slide.background.fill.solid()
+                    slide.background.fill.fore_color.rgb = template_slide.background.fill.fore_color.rgb
+        except (AttributeError, ValueError):
+            pass
         
         # Copy all shapes from template slide
         for shape in template_slide.shapes:
@@ -197,10 +206,11 @@ def create_slide_from_template(prs, template_prs, slide_index=0):
             
             # Copy shape based on type
             if hasattr(shape, 'image'):
-                # Picture shape
+                # Picture shape - wrap blob in BytesIO
                 try:
                     image = shape.image
-                    slide.shapes.add_picture(image.blob, left, top, width, height)
+                    image_blob = BytesIO(image.blob)
+                    slide.shapes.add_picture(image_blob, left, top, width, height)
                 except (AttributeError, ValueError, IOError):
                     pass
             elif hasattr(shape, 'text'):
@@ -218,13 +228,6 @@ def create_slide_from_template(prs, template_prs, slide_index=0):
                             new_para.font.color.rgb = para.font.color.rgb
                 except (AttributeError, ValueError, IndexError):
                     pass
-        
-        # Copy background
-        try:
-            slide.background.fill.solid()
-            slide.background.fill.fore_color.rgb = template_slide.background.fill.fore_color.rgb
-        except (AttributeError, ValueError):
-            pass
         
         return slide
     except Exception as e:
