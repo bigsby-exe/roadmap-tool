@@ -3,6 +3,8 @@ Core PowerPoint generation functions.
 """
 
 import os
+import tempfile
+import shutil
 from io import BytesIO
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -21,13 +23,49 @@ def hex_to_rgb(hex_color):
     return RGBColor(int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16))
 
 
+def copy_to_temp(file_path):
+    """
+    Copy file to temporary location to avoid OneDrive locking issues.
+    
+    Args:
+        file_path: Path to source file
+    
+    Returns:
+        Path to temporary file, or original path if copy fails
+    """
+    try:
+        temp_dir = tempfile.gettempdir()
+        # Create unique temp filename to avoid conflicts
+        base_name = os.path.basename(file_path)
+        name, ext = os.path.splitext(base_name)
+        temp_file = tempfile.NamedTemporaryFile(
+            mode='wb',
+            suffix=ext,
+            prefix=f"{name}_",
+            delete=False,
+            dir=temp_dir
+        )
+        temp_file_path = temp_file.name
+        temp_file.close()
+        
+        # Copy file to temp location
+        shutil.copy2(file_path, temp_file_path)
+        return temp_file_path
+    except Exception as e:
+        print(f"Warning: Could not copy file to temp location: {e}")
+        print("Attempting to read from original location...")
+        return file_path
+
+
 def read_objectives(excel_file):
     """
     Read Objectives sheet from Excel file.
     Returns: DataFrame with 'North star' and 'Key elements' columns
     """
+    # Copy to temp location to avoid OneDrive locking issues
+    temp_file = copy_to_temp(excel_file)
     try:
-        df = pd.read_excel(excel_file, sheet_name='Objectives')
+        df = pd.read_excel(temp_file, sheet_name='Objectives')
         # Handle case-insensitive column names
         df.columns = df.columns.str.strip()
         # Try to find columns (case-insensitive)
@@ -58,6 +96,13 @@ def read_objectives(excel_file):
     except Exception as e:
         print(f"Error reading Objectives sheet: {e}")
         return {'north_star': '', 'key_elements': []}
+    finally:
+        # Clean up temp file if it was created
+        if temp_file != excel_file and os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except Exception as e:
+                print(f"Warning: Could not delete temp file {temp_file}: {e}")
 
 
 def read_roadmap(excel_file):
@@ -65,8 +110,10 @@ def read_roadmap(excel_file):
     Read Roadmap sheet from Excel file.
     Returns: DataFrame with Timeline, Phase, and Workpackage columns
     """
+    # Copy to temp location to avoid OneDrive locking issues
+    temp_file = copy_to_temp(excel_file)
     try:
-        df = pd.read_excel(excel_file, sheet_name='Roadmap')
+        df = pd.read_excel(temp_file, sheet_name='Roadmap')
         df.columns = df.columns.str.strip()
         
         # Try to identify columns (case-insensitive)
@@ -104,6 +151,13 @@ def read_roadmap(excel_file):
     except Exception as e:
         print(f"Error reading Roadmap sheet: {e}")
         return pd.DataFrame(columns=['Timeline', 'Phase', 'Workpackage'])
+    finally:
+        # Clean up temp file if it was created
+        if temp_file != excel_file and os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except Exception as e:
+                print(f"Warning: Could not delete temp file {temp_file}: {e}")
 
 
 def add_logo(slide, logo_path, position):
@@ -664,15 +718,16 @@ def create_timeline_overview_slide(prs, roadmap_df):
     if not timeline_phase_items:
         return
     
-    # Calculate layout dimensions
-    ARROW_WIDTH = Inches(0.5)
-    BOX_HEIGHT = Inches(1.5)
-    BOX_WIDTH = Inches(2.2)
+    # Calculate layout dimensions using config
+    shape_width = config.OVERVIEW_SHAPE_WIDTH
+    shape_height = config.OVERVIEW_SHAPE_HEIGHT
+    chevron_width = config.OVERVIEW_CHEVRON_WIDTH
+    chevron_height = config.OVERVIEW_CHEVRON_HEIGHT
     
     # Calculate total width needed
     total_items = len(timeline_phase_items)
-    total_arrows = total_items - 1
-    total_width = total_items * BOX_WIDTH + total_arrows * ARROW_WIDTH
+    total_chevrons = total_items - 1
+    total_width = total_items * shape_width + total_chevrons * (chevron_width - Inches(0.4))
     
     # Start position (centered)
     available_width = config.SLIDE_WIDTH - (2 * config.SIDE_MARGIN)
@@ -681,7 +736,7 @@ def create_timeline_overview_slide(prs, roadmap_df):
     
     current_x = start_x
     
-    # Draw timeline boxes with phase subtext and arrows
+    # Draw timeline shapes with phase subtext and chevrons
     for i, item in enumerate(timeline_phase_items):
         timeline = item['timeline']
         phase = item['phase']
@@ -692,93 +747,65 @@ def create_timeline_overview_slide(prs, roadmap_df):
         else:
             box_text = timeline
         
-        # Timeline box with phase subtext
-        if config.USE_SHAPES:
-            timeline_shape = slide.shapes.add_shape(
-                MSO_SHAPE.ROUNDED_RECTANGLE,
-                current_x,
-                y_pos,
-                BOX_WIDTH,
-                BOX_HEIGHT
-            )
-            timeline_shape.fill.solid()
-            timeline_shape.fill.fore_color.rgb = config.BRAND_PRIMARY_COLOR
-            timeline_shape.line.color.rgb = config.BRAND_PRIMARY_COLOR
-            timeline_shape.line.width = Pt(2)
-            
-            timeline_text = timeline_shape.text_frame
-            timeline_text.text = box_text
-            timeline_text.word_wrap = True
-            timeline_text.margin_left = Inches(0.15)
-            timeline_text.margin_right = Inches(0.15)
-            timeline_text.margin_top = Inches(0.1)
-            timeline_text.margin_bottom = Inches(0.1)
-            
-            # Timeline line (bold)
-            timeline_para = timeline_text.paragraphs[0]
-            timeline_para.font.name = config.BODY_FONT_NAME
-            timeline_para.font.size = Pt(18)
-            timeline_para.font.bold = True
-            timeline_para.font.color.rgb = RGBColor(255, 255, 255)  # White text on colored background
-            timeline_para.alignment = PP_ALIGN.CENTER
-            
-            # Phase subtext line (if exists)
-            if phase:
-                if len(timeline_text.paragraphs) < 2:
-                    timeline_text.add_paragraph()
-                phase_para = timeline_text.paragraphs[1]
-                phase_para.text = phase
-                phase_para.font.name = config.BODY_FONT_NAME
-                phase_para.font.size = Pt(12)
-                phase_para.font.bold = False
-                phase_para.font.color.rgb = RGBColor(255, 255, 255)  # White text
-                phase_para.alignment = PP_ALIGN.CENTER
-        else:
-            timeline_box = slide.shapes.add_textbox(
-                current_x,
-                y_pos,
-                BOX_WIDTH,
-                BOX_HEIGHT
-            )
-            timeline_frame = timeline_box.text_frame
-            timeline_frame.text = box_text
-            timeline_frame.word_wrap = True
-            
-            timeline_para = timeline_frame.paragraphs[0]
-            timeline_para.font.name = config.BODY_FONT_NAME
-            timeline_para.font.size = Pt(18)
-            timeline_para.font.bold = True
-            timeline_para.font.color.rgb = config.BRAND_PRIMARY_COLOR
-            timeline_para.alignment = PP_ALIGN.CENTER
-            
-            if phase:
-                if len(timeline_frame.paragraphs) < 2:
-                    timeline_frame.add_paragraph()
-                phase_para = timeline_frame.paragraphs[1]
-                phase_para.text = phase
-                phase_para.font.name = config.BODY_FONT_NAME
-                phase_para.font.size = Pt(12)
-                phase_para.font.color.rgb = config.BRAND_SECONDARY_COLOR
-                phase_para.alignment = PP_ALIGN.CENTER
+        # Timeline shape using PENTAGON AutoShape
+        timeline_shape = slide.shapes.add_shape(
+            MSO_SHAPE.PENTAGON,
+            current_x,
+            y_pos,
+            shape_width,
+            shape_height
+        )
+        timeline_shape.fill.solid()
+        timeline_shape.fill.fore_color.rgb = config.OVERVIEW_TIMELINE_SHAPE_COLOR
+        timeline_shape.line.color.rgb = config.OVERVIEW_TIMELINE_SHAPE_COLOR
+        timeline_shape.line.width = Pt(2)
         
-        current_x += BOX_WIDTH
+        timeline_text = timeline_shape.text_frame
+        timeline_text.text = box_text
+        timeline_text.word_wrap = True
+        timeline_text.margin_left = Inches(0.1)
+        timeline_text.margin_right = Inches(0.1)
+        timeline_text.margin_top = Inches(0.1)
+        timeline_text.margin_bottom = Inches(0.1)
         
-        # Arrow after timeline (if not last item)
+        # Timeline line (bold)
+        timeline_para = timeline_text.paragraphs[0]
+        timeline_para.font.name = config.BODY_FONT_NAME
+        timeline_para.font.size = Pt(18)
+        timeline_para.font.bold = True
+        timeline_para.font.color.rgb = config.OVERVIEW_TIMELINE_TEXT_COLOR
+        timeline_para.alignment = PP_ALIGN.CENTER
+        
+        # Phase subtext line (if exists)
+        if phase:
+            if len(timeline_text.paragraphs) < 2:
+                timeline_text.add_paragraph()
+            phase_para = timeline_text.paragraphs[1]
+            phase_para.text = phase
+            phase_para.font.name = config.BODY_FONT_NAME
+            phase_para.font.size = Pt(12)
+            phase_para.font.bold = False
+            phase_para.font.color.rgb = config.OVERVIEW_TIMELINE_TEXT_COLOR
+            phase_para.alignment = PP_ALIGN.CENTER
+        
+        current_x += shape_width - Inches(0.4)  # Overlap chevron slightly
+        
+        # Chevron connector after timeline (if not last item)
         if i < len(timeline_phase_items) - 1:
-            arrow_x = current_x
-            arrow_y = y_pos + (BOX_HEIGHT / 2) - Inches(0.1)
-            arrow_shape = slide.shapes.add_shape(
-                MSO_SHAPE.RIGHT_ARROW,
-                arrow_x,
-                arrow_y,
-                ARROW_WIDTH,
-                Inches(0.2)
+            chevron_x = current_x
+            chevron_y = y_pos
+            chevron_shape = slide.shapes.add_shape(
+                MSO_SHAPE.CHEVRON,
+                chevron_x,
+                chevron_y,
+                chevron_width,
+                chevron_height
             )
-            arrow_shape.fill.solid()
-            arrow_shape.fill.fore_color.rgb = config.BRAND_ACCENT_COLOR
-            arrow_shape.line.color.rgb = config.BRAND_ACCENT_COLOR
+            chevron_shape.fill.solid()
+            chevron_shape.fill.fore_color.rgb = config.OVERVIEW_CHEVRON_COLOR
+            chevron_shape.line.color.rgb = config.OVERVIEW_CHEVRON_COLOR
             
-            current_x += ARROW_WIDTH
+            current_x += chevron_width - Inches(0.4)  # Overlap next shape slightly
 
 
 def create_roadmap_slides(prs, roadmap_df):
