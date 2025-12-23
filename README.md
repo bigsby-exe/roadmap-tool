@@ -15,9 +15,9 @@ A Python script that automatically converts Excel roadmap data into a profession
 ### Prerequisites
 
 - Python 3.7 or higher
-- [UV](https://github.com/astral-sh/uv) (recommended) or pip
+- [UV](https://github.com/astral-sh/uv) - Fast Python package installer
 
-### Option 1: Install as UV Tool (Recommended)
+### Install as UV Tool
 
 Install the tool globally using UV:
 
@@ -38,24 +38,7 @@ To install from a git repository:
 uv tool install git+https://github.com/yourusername/roadmap-ppt-generator.git
 ```
 
-### Option 2: Install with pip
-
-```bash
-pip install -r requirements.txt
-```
-
-Then run the script directly:
-
-```bash
-python main.py your_roadmap.xlsx
-```
-
-### Dependencies
-
-This project requires:
-- `python-pptx>=0.6.21` - For PowerPoint generation
-- `pandas>=2.0.0` - For Excel file reading
-- `openpyxl>=3.1.0` - For Excel file support
+**Note**: Dependencies (`python-pptx`, `pandas`, `openpyxl`) are automatically installed when you install the tool.
 
 ## Excel File Format
 
@@ -99,20 +82,11 @@ This sheet is currently skipped by the script but can be added for future use.
 
 ## Usage
 
-### If Installed as UV Tool
-
-After installing with `uv tool install .`, you can run:
+After installing with `uv tool install .`, run the tool:
 
 ```bash
 roadmap-ppt your_roadmap.xlsx
 roadmap-ppt your_roadmap.xlsx -o my_presentation.pptx
-```
-
-### If Running Directly
-
-```bash
-python main.py your_roadmap.xlsx
-python main.py your_roadmap.xlsx -o my_presentation.pptx
 ```
 
 ### Command-Line Options
@@ -120,11 +94,16 @@ python main.py your_roadmap.xlsx -o my_presentation.pptx
 - `excel_file` (required): Path to your Excel file
 - `-o, --output` (optional): Custom output file path for the PowerPoint presentation
 
-Both methods will create `your_roadmap.pptx` in the same directory as your Excel file (unless `-o` is specified).
+The tool will create `your_roadmap.pptx` in the same directory as your Excel file (unless `-o` is specified).
 
 ## Customization
 
-All branding and styling options are located at the top of `main.py` in the **CONFIGURATION SECTION**. Edit these values to match your corporate branding:
+All branding and styling options are located in `src/roadmap_ppt/config.py` in the **CONFIGURATION SECTION**. Edit these values to match your corporate branding:
+
+**Note**: After modifying the config file, you'll need to reinstall the tool:
+```bash
+uv tool install .
+```
 
 ### Colors
 
@@ -208,7 +187,7 @@ The generated PowerPoint presentation includes:
 ### Example 1: Basic Usage
 
 ```bash
-python main.py roadmap.xlsx
+roadmap-ppt roadmap.xlsx
 ```
 
 Creates `roadmap.pptx` with default branding.
@@ -216,13 +195,13 @@ Creates `roadmap.pptx` with default branding.
 ### Example 2: Custom Output Location
 
 ```bash
-python main.py C:\Documents\roadmap.xlsx -o C:\Presentations\Q1_Roadmap.pptx
+roadmap-ppt C:\Documents\roadmap.xlsx -o C:\Presentations\Q1_Roadmap.pptx
 ```
 
 ### Example 3: Using Different Excel File
 
 ```bash
-python main.py my_company_roadmap_2024.xlsx -o company_presentation.pptx
+roadmap-ppt my_company_roadmap_2024.xlsx -o company_presentation.pptx
 ```
 
 ## Troubleshooting
@@ -262,10 +241,17 @@ python main.py my_company_roadmap_2024.xlsx -o company_presentation.pptx
 
 ```
 roadmap/
-├── main.py              # Main script
-├── requirements.txt      # Python dependencies
-├── README.md           # This file
-└── your_roadmap.xlsx   # Your Excel file (example)
+├── src/
+│   └── roadmap_ppt/
+│       ├── __init__.py    # Package initialization
+│       ├── config.py      # Configuration (BRANDING - edit here!)
+│       ├── generator.py   # Core PowerPoint generation logic
+│       └── cli.py          # Command-line interface
+├── main.py                # Backward compatibility wrapper
+├── pyproject.toml         # Package configuration
+├── requirements.txt       # Python dependencies
+├── README.md              # This file
+└── your_roadmap.xlsx      # Your Excel file (example)
 ```
 
 ## License
@@ -277,5 +263,5 @@ This script is provided as-is for your use. Feel free to modify and customize as
 For issues or questions:
 1. Check the Troubleshooting section above
 2. Verify your Excel file format matches the requirements
-3. Review the configuration section in `main.py` for customization options
+3. Review the configuration section in `src/roadmap_ppt/config.py` for customization options
 
