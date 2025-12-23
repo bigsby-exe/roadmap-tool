@@ -1,0 +1,22 @@
+[project]
+name = "roadmap-ppt-generator"
+version = "1.0.0"
+description = "Generate professional PowerPoint presentations from Excel roadmap data"
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "python-pptx>=0.6.21",
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.0",
+]
+
+[project.scripts]
+roadmap-ppt = "main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = []
+
