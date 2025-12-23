@@ -214,20 +214,59 @@ def create_slide_from_template(prs, template_prs, slide_index=0):
                 except (AttributeError, ValueError, IOError):
                     pass
             elif hasattr(shape, 'text'):
-                # Text shape - copy formatting but content will be replaced
+                # Text shape - copy paragraphs individually to preserve structure
                 try:
                     new_shape = slide.shapes.add_textbox(left, top, width, height)
-                    new_shape.text_frame.text = shape.text_frame.text
-                    # Copy paragraph formatting
-                    for i, para in enumerate(shape.text_frame.paragraphs):
-                        if i < len(new_shape.text_frame.paragraphs):
-                            new_para = new_shape.text_frame.paragraphs[i]
-                            new_para.font.name = para.font.name
-                            new_para.font.size = para.font.size
-                            new_para.font.bold = para.font.bold
-                            new_para.font.color.rgb = para.font.color.rgb
+                    new_text_frame = new_shape.text_frame
+                    new_text_frame.word_wrap = shape.text_frame.word_wrap
+                    
+                    # Clear default paragraph
+                    new_text_frame.clear()
+                    
+                    # Copy each paragraph from template
+                    for para in shape.text_frame.paragraphs:
+                        # Add new paragraph
+                        new_para = new_text_frame.add_paragraph()
+                        
+                        # Copy paragraph-level properties
+                        new_para.level = para.level
+                        new_para.alignment = para.alignment
+                        new_para.space_before = para.space_before
+                        new_para.space_after = para.space_after
+                        
+                        # Copy runs within paragraph (preserves formatting)
+                        for run in para.runs:
+                            new_run = new_para.add_run()
+                            new_run.text = run.text
+                            # Copy run formatting
+                            new_run.font.name = run.font.name
+                            new_run.font.size = run.font.size
+                            new_run.font.bold = run.font.bold
+                            new_run.font.italic = run.font.italic
+                            new_run.font.underline = run.font.underline
+                            try:
+                                new_run.font.color.rgb = run.font.color.rgb
+                            except (AttributeError, ValueError):
+                                pass
+                        
+                        # If no runs, copy paragraph text directly
+                        if len(para.runs) == 0:
+                            new_para.text = para.text
+                            # Apply paragraph-level font formatting
+                            try:
+                                new_para.font.name = para.font.name
+                                new_para.font.size = para.font.size
+                                new_para.font.bold = para.font.bold
+                                new_para.font.color.rgb = para.font.color.rgb
+                            except (AttributeError, ValueError):
+                                pass
                 except (AttributeError, ValueError, IndexError):
-                    pass
+                    # Fallback: simple text copy if detailed copying fails
+                    try:
+                        new_shape = slide.shapes.add_textbox(left, top, width, height)
+                        new_shape.text_frame.text = shape.text_frame.text
+                    except (AttributeError, ValueError):
+                        pass
         
         return slide
     except Exception as e:
